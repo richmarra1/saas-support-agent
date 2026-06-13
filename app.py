@@ -1,14 +1,16 @@
 """
 SaaS Support Agent - Streamlit Web App
 ----------------------------------------
-A visual interface for the agentic workflow that shows each step
-of the pipeline as it executes: Classify -> Research -> Respond.
+A visual interface comparing two architectures for the same task:
+  - v1: a fixed three-step pipeline (Classify -> Research -> Respond)
+  - v2: a true agentic loop where Claude chooses its own tool calls
 """
 
 import streamlit as st
 import time
 import json
 from agents import classify_ticket, research_issue, format_response
+from agentic_engine import run_agent
 
 
 # ---------------------------------------------------------------------------
@@ -69,6 +71,12 @@ st.markdown("""
     .severity-medium { color: #ca8a04; font-weight: 700; }
     .severity-low { color: #16a34a; font-weight: 700; }
 
+    .outcome-resolved { color: #16a34a; border-left: 4px solid #16a34a; }
+    .outcome-escalated { color: #dc2626; border-left: 4px solid #dc2626; }
+.outcome-text-resolved { color: #16a34a !important; font-weight: 700; }
+.outcome-text-escalated { color: #dc2626 !important; font-weight: 700; }
+.outcome-text-max_steps_reached { color: #ca8a04 !important; font-weight: 700; }
+
     .metric-box {
         background: white;
         border: 1px solid #e2e4f0;
@@ -120,25 +128,29 @@ st.markdown("""
 st.markdown('<div class="main-header">SaaS Support Agent</div>', unsafe_allow_html=True)
 st.markdown(
     '<div class="sub-header">'
-    'An agentic workflow using Claude to classify, research, and resolve '
-    'SaaS technical support tickets in seconds.'
+    'Two architectures for resolving SaaS technical support tickets with Claude: '
+    'a deterministic three-step pipeline, and a true agentic loop where Claude '
+    'decides its own next action.'
     '</div>',
     unsafe_allow_html=True,
 )
+
+tab_pipeline, tab_agentic = st.tabs(["Sequential Pipeline (v1)", "Agentic Loop (v2)"])
 
 # Show architecture overview in sidebar
 with st.sidebar:
     st.markdown("### How It Works")
     st.markdown(
-        "This app runs a **three-agent pipeline** powered by Claude:\n\n"
-        "**Agent 1: Classifier**\n"
-        "Reads the ticket and determines category + severity.\n\n"
-        "**Agent 2: Researcher**\n"
-        "Searches a structured knowledge base and matches the "
-        "most relevant troubleshooting steps.\n\n"
-        "**Agent 3: Response Formatter**\n"
-        "Produces a professional support response ready for "
-        "a human agent to review and send."
+        "This app demonstrates **two architectures** for the same task:\n\n"
+        "**Sequential Pipeline (v1)**\n"
+        "Three Claude calls in a fixed order: Classify, Research, Respond. "
+        "The order is hardcoded in Python. Same input always produces the "
+        "same sequence of operations.\n\n"
+        "**Agentic Loop (v2)**\n"
+        "Claude is given tools and a goal. Claude decides which tool to "
+        "call, observes the result, and decides what to do next, including "
+        "retrying a different search or escalating to a human. The "
+        "sequence of operations is not fixed in advance."
     )
     st.divider()
     st.markdown("### Supported Categories")
@@ -195,169 +207,293 @@ with st.sidebar:
         )
 
 
-# ---------------------------------------------------------------------------
-# Main Input Area
-# ---------------------------------------------------------------------------
-default_text = st.session_state.get("sample", "")
+with tab_pipeline:
+    # ---------------------------------------------------------------------------
+    # Main Input Area
+    # ---------------------------------------------------------------------------
+    default_text = st.session_state.get("sample", "")
 
-ticket_input = st.text_area(
-    "Paste a support ticket below:",
-    value=default_text,
-    height=150,
-    placeholder="Example: Our team cannot log in after the SSO migration. We get a SAML error every time...",
-)
+    ticket_input = st.text_area(
+        "Paste a support ticket below:",
+        value=default_text,
+        height=150,
+        placeholder="Example: Our team cannot log in after the SSO migration. We get a SAML error every time...",
+    )
 
-col_btn, col_space = st.columns([1, 3])
-with col_btn:
-    run_button = st.button("Analyze Ticket", type="primary", use_container_width=True)
+    col_btn, col_space = st.columns([1, 3])
+    with col_btn:
+        run_button = st.button("Analyze Ticket", type="primary", use_container_width=True)
 
 
-# ---------------------------------------------------------------------------
-# Pipeline Execution
-# ---------------------------------------------------------------------------
-if run_button and ticket_input.strip():
+    # ---------------------------------------------------------------------------
+    # Pipeline Execution
+    # ---------------------------------------------------------------------------
+    if run_button and ticket_input.strip():
 
-    # Clear any previous sample so it does not persist
-    st.session_state.pop("sample", None)
+        # Clear any previous sample so it does not persist
+        st.session_state.pop("sample", None)
 
-    st.divider()
+        st.divider()
 
-    # Track total time
-    total_start = time.time()
+        # Track total time
+        total_start = time.time()
 
-    # ------ AGENT 1: CLASSIFIER ------
-    with st.container():
-        st.markdown(
-            '<div class="agent-card agent-1">'
-            '<div class="agent-title">Agent 1: Ticket Classifier</div>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-        with st.spinner("Classifying ticket..."):
-            t1 = time.time()
-            classification = classify_ticket(ticket_input)
-            t1_elapsed = time.time() - t1
+        # ------ AGENT 1: CLASSIFIER ------
+        with st.container():
+            st.markdown(
+                '<div class="agent-card agent-1">'
+                '<div class="agent-title">Agent 1: Ticket Classifier</div>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+            with st.spinner("Classifying ticket..."):
+                t1 = time.time()
+                classification = classify_ticket(ticket_input)
+                t1_elapsed = time.time() - t1
 
-        col1, col2, col3 = st.columns(3)
-        with col1:
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.markdown(
+                    f'<div class="metric-box">'
+                    f'<div class="metric-label">Category</div>'
+                    f'<div class="metric-value">{classification.get("category", "N/A").title()}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+            with col2:
+                severity = classification.get("severity", "medium")
+                st.markdown(
+                    f'<div class="metric-box">'
+                    f'<div class="metric-label">Severity</div>'
+                    f'<div class="metric-value severity-{severity}">{severity.upper()}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+            with col3:
+                st.markdown(
+                    f'<div class="metric-box">'
+                    f'<div class="metric-label">Classified In</div>'
+                    f'<div class="metric-value">{t1_elapsed:.1f}s</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown(f"**Summary:** {classification.get('summary', 'N/A')}")
+            st.markdown("")
+
+        # ------ AGENT 2: RESEARCHER ------
+        with st.container():
+            st.markdown(
+                '<div class="agent-card agent-2">'
+                '<div class="agent-title">Agent 2: Knowledge Base Researcher</div>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+            with st.spinner("Searching knowledge base and analyzing solutions..."):
+                t2 = time.time()
+                research = research_issue(classification)
+                t2_elapsed = time.time() - t2
+
+            col_match, col_time = st.columns([3, 1])
+            with col_match:
+                st.markdown(f"**Matched Issue:** {research.get('matched_issue', 'N/A')}")
+                st.markdown(f"**KB Category:** {research.get('kb_category', 'N/A')}")
+            with col_time:
+                st.markdown(
+                    f'<div class="metric-box">'
+                    f'<div class="metric-label">Researched In</div>'
+                    f'<div class="metric-value">{t2_elapsed:.1f}s</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+            with st.expander("View Troubleshooting Steps", expanded=False):
+                steps = research.get("troubleshooting_steps", [])
+                for i, step in enumerate(steps, 1):
+                    st.markdown(f"{i}. {step}")
+
+            with st.expander("View Resolution Methods", expanded=False):
+                methods = research.get("resolution_methods", [])
+                for i, method in enumerate(methods, 1):
+                    st.markdown(f"{i}. {method}")
+
+            if research.get("escalation_trigger"):
+                st.info(f"**Escalation Trigger:** {research['escalation_trigger']}")
+
+            st.markdown("")
+
+        # ------ AGENT 3: RESPONSE FORMATTER ------
+        with st.container():
+            st.markdown(
+                '<div class="agent-card agent-3">'
+                '<div class="agent-title">Agent 3: Response Formatter</div>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+            with st.spinner("Generating professional support response..."):
+                t3 = time.time()
+                final_response = format_response(classification, research)
+                t3_elapsed = time.time() - t3
+
+            st.markdown(final_response)
+            st.markdown("")
+
+        # ------ SUMMARY METRICS ------
+        total_elapsed = time.time() - total_start
+
+        st.divider()
+        st.markdown("### Pipeline Summary")
+
+        m1, m2, m3, m4 = st.columns(4)
+        with m1:
+            st.metric("Total Time", f"{total_elapsed:.1f}s")
+        with m2:
+            st.metric("Agents Used", "3")
+        with m3:
+            st.metric("API Calls", "3")
+        with m4:
+            st.metric("KB Categories Searched", "1")
+
+        # ------ RAW JSON (for technical reviewers) ------
+        with st.expander("View Raw Pipeline Output (JSON)", expanded=False):
+            full_output = {
+                "input_ticket": ticket_input,
+                "classification": classification,
+                "research": research,
+                "response": final_response,
+                "pipeline_metrics": {
+                    "classification_time_seconds": round(t1_elapsed, 2),
+                    "research_time_seconds": round(t2_elapsed, 2),
+                    "response_time_seconds": round(t3_elapsed, 2),
+                    "total_time_seconds": round(total_elapsed, 2),
+                    "agents_used": 3,
+                    "api_calls": 3,
+                },
+            }
+            st.json(full_output)
+
+    elif run_button and not ticket_input.strip():
+        st.warning("Please enter a support ticket to analyze.")
+
+
+with tab_agentic:
+    st.markdown(
+        "This tab runs the **same support ticket through a true agentic loop**. "
+        "Claude is given tools (search the knowledge base, list categories, "
+        "escalate, or deliver a response) and decides for itself which to call, "
+        "in what order, and when the ticket is resolved. Nothing about the "
+        "sequence below is hardcoded, it is Claude's own reasoning, shown step "
+        "by step."
+    )
+
+    agentic_default = st.session_state.get("sample", "")
+
+    agentic_ticket_input = st.text_area(
+        "Paste a support ticket below:",
+        value=agentic_default,
+        height=150,
+        placeholder="Example: Our team cannot log in after the SSO migration. We get a SAML error every time...",
+        key="agentic_input",
+    )
+
+    agentic_run = st.button("Run Agent", type="primary", key="agentic_run_btn")
+
+    if agentic_run and agentic_ticket_input.strip():
+        st.session_state.pop("sample", None)
+        st.divider()
+
+        with st.spinner("Agent is reasoning..."):
+            agent_start = time.time()
+            result = run_agent(agentic_ticket_input)
+            agent_elapsed = time.time() - agent_start
+
+        # ------ STEP-BY-STEP TRACE ------
+        st.markdown("### Agent Reasoning Trace")
+        for step in result["trace"]:
+            with st.container():
+                st.markdown(
+                    f'<div class="agent-card agent-2">'
+                    f'<div class="agent-title">Step {step["step"]}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+                if step.get("reasoning"):
+                    st.markdown(f"**Reasoning:** {step['reasoning']}")
+
+                for call in step.get("tool_calls", []):
+                    st.markdown(f"**Tool call:** `{call['name']}`")
+                    st.json(call["input"])
+
+                for tool_result in step.get("tool_results", []):
+                    with st.expander("Tool result", expanded=False):
+                        st.json(tool_result)
+
+                if step.get("note"):
+                    st.caption(step["note"])
+
+                st.markdown("")
+
+        # ------ OUTCOME ------
+        st.divider()
+        outcome = result["outcome"]
+        data = result["data"]
+
+        if outcome == "resolved":
+            st.markdown(
+                '<div class="agent-card outcome-resolved">'
+                '<div class="agent-title">Outcome: Resolved</div>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(f"**Category:** {data.get('category', 'N/A').title()}")
+            with col2:
+                sev = data.get("severity", "medium")
+                st.markdown(
+                    f'<span class="severity-{sev}">**Severity:** {sev.upper()}</span>',
+                    unsafe_allow_html=True,
+                )
+            st.markdown(data.get("response_text", ""))
+
+        elif outcome == "escalated":
+            st.markdown(
+                '<div class="agent-card outcome-escalated">'
+                '<div class="agent-title">Outcome: Escalated to Human</div>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+            sev = data.get("severity", "medium")
+            st.markdown(f"**Escalated to:** {data.get('escalation_team', 'N/A')}")
+            st.markdown(
+                f'<span class="severity-{sev}">**Severity:** {sev.upper()}</span>',
+                unsafe_allow_html=True,
+            )
+            st.markdown(f"**Reason:** {data.get('reason', 'N/A')}")
+
+        else:
+            st.warning(f"Agent did not reach a resolution: {data.get('reason', 'Unknown')}")
+
+        # ------ SUMMARY METRICS ------
+        st.divider()
+        st.markdown("### Agent Run Summary")
+        m1, m2, m3 = st.columns(3)
+        with m1:
+            st.metric("Total Time", f"{agent_elapsed:.1f}s")
+        with m2:
+            st.metric("Reasoning Steps", str(len(result["trace"])))
+        with m3:
+            outcome_label = outcome.replace("_", " ").title()
             st.markdown(
                 f'<div class="metric-box">'
-                f'<div class="metric-label">Category</div>'
-                f'<div class="metric-value">{classification.get("category", "N/A").title()}</div>'
+                f'<div class="metric-label">Outcome</div>'
+                f'<div class="metric-value outcome-text-{outcome}">{outcome_label}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
-        with col2:
-            severity = classification.get("severity", "medium")
-            st.markdown(
-                f'<div class="metric-box">'
-                f'<div class="metric-label">Severity</div>'
-                f'<div class="metric-value severity-{severity}">{severity.upper()}</div>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-        with col3:
-            st.markdown(
-                f'<div class="metric-box">'
-                f'<div class="metric-label">Classified In</div>'
-                f'<div class="metric-value">{t1_elapsed:.1f}s</div>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
 
-        st.markdown(f"**Summary:** {classification.get('summary', 'N/A')}")
-        st.markdown("")
+        with st.expander("View Raw Agent Output (JSON)", expanded=False):
+            st.json(result)
 
-    # ------ AGENT 2: RESEARCHER ------
-    with st.container():
-        st.markdown(
-            '<div class="agent-card agent-2">'
-            '<div class="agent-title">Agent 2: Knowledge Base Researcher</div>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-        with st.spinner("Searching knowledge base and analyzing solutions..."):
-            t2 = time.time()
-            research = research_issue(classification)
-            t2_elapsed = time.time() - t2
-
-        col_match, col_time = st.columns([3, 1])
-        with col_match:
-            st.markdown(f"**Matched Issue:** {research.get('matched_issue', 'N/A')}")
-            st.markdown(f"**KB Category:** {research.get('kb_category', 'N/A')}")
-        with col_time:
-            st.markdown(
-                f'<div class="metric-box">'
-                f'<div class="metric-label">Researched In</div>'
-                f'<div class="metric-value">{t2_elapsed:.1f}s</div>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-
-        with st.expander("View Troubleshooting Steps", expanded=False):
-            steps = research.get("troubleshooting_steps", [])
-            for i, step in enumerate(steps, 1):
-                st.markdown(f"{i}. {step}")
-
-        with st.expander("View Resolution Methods", expanded=False):
-            methods = research.get("resolution_methods", [])
-            for i, method in enumerate(methods, 1):
-                st.markdown(f"{i}. {method}")
-
-        if research.get("escalation_trigger"):
-            st.info(f"**Escalation Trigger:** {research['escalation_trigger']}")
-
-        st.markdown("")
-
-    # ------ AGENT 3: RESPONSE FORMATTER ------
-    with st.container():
-        st.markdown(
-            '<div class="agent-card agent-3">'
-            '<div class="agent-title">Agent 3: Response Formatter</div>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-        with st.spinner("Generating professional support response..."):
-            t3 = time.time()
-            final_response = format_response(classification, research)
-            t3_elapsed = time.time() - t3
-
-        st.markdown(final_response)
-        st.markdown("")
-
-    # ------ SUMMARY METRICS ------
-    total_elapsed = time.time() - total_start
-
-    st.divider()
-    st.markdown("### Pipeline Summary")
-
-    m1, m2, m3, m4 = st.columns(4)
-    with m1:
-        st.metric("Total Time", f"{total_elapsed:.1f}s")
-    with m2:
-        st.metric("Agents Used", "3")
-    with m3:
-        st.metric("API Calls", "3")
-    with m4:
-        st.metric("KB Categories Searched", "1")
-
-    # ------ RAW JSON (for technical reviewers) ------
-    with st.expander("View Raw Pipeline Output (JSON)", expanded=False):
-        full_output = {
-            "input_ticket": ticket_input,
-            "classification": classification,
-            "research": research,
-            "response": final_response,
-            "pipeline_metrics": {
-                "classification_time_seconds": round(t1_elapsed, 2),
-                "research_time_seconds": round(t2_elapsed, 2),
-                "response_time_seconds": round(t3_elapsed, 2),
-                "total_time_seconds": round(total_elapsed, 2),
-                "agents_used": 3,
-                "api_calls": 3,
-            },
-        }
-        st.json(full_output)
-
-elif run_button and not ticket_input.strip():
-    st.warning("Please enter a support ticket to analyze.")
+    elif agentic_run and not agentic_ticket_input.strip():
+        st.warning("Please enter a support ticket to analyze.")

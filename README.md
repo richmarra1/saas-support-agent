@@ -1,14 +1,29 @@
-# SaaS Support Agent - Agentic AI Workflow
+# SaaS Support Agent: Pipeline vs. Agentic Loop
 
-An agentic workflow that orchestrates multiple Claude AI agents to automatically classify, research, and resolve SaaS technical support tickets. Built to demonstrate practical AI orchestration that saves human time in real support operations.
+This project implements the same task, resolving SaaS technical support
+tickets, using two different architectures, side by side in one app. The
+goal is to demonstrate the difference between an LLM pipeline (sometimes
+loosely called "agentic" in industry marketing) and a genuinely agentic
+system under the accepted technical definition: an autonomous Reason-Act-
+Observe loop in which the model itself decides what action to take next.
 
 ## What This Project Demonstrates
 
-- **Agentic AI Orchestration**: Three specialized AI agents working in a pipeline, each with a distinct role
-- **Tool Use**: Agents query a structured knowledge base as a "tool" to ground responses in real data
-- **Practical Business Value**: Turns a 15-20 minute manual triage process into a 10-second automated pipeline
+- **v1, Sequential Pipeline**: Three Claude calls in a fixed order (Classify,
+  Research, Respond), hardcoded in Python. Same input always produces the
+  same sequence of operations. This is a compound AI workflow, not an agent.
+- **v2, Agentic Loop**: Claude is given a goal and a set of tools (search the
+  knowledge base, list categories, escalate to a human, or deliver a
+  response). Claude decides which tool to call, observes the result, and
+  decides what to do next, including retrying with a different search or
+  escalating, until it calls one of two terminal tools. The sequence of
+  operations is not fixed in advance and can vary ticket to ticket.
+- **Tool Use**: Both versions ground their output in a structured knowledge
+  base rather than relying on the model's unverified recall.
+- **Practical Business Value**: Turns a 15 to 20 minute manual triage process
+  into an automated resolution or a clean escalation with context attached.
 
-## Architecture
+## Architecture: v1, Sequential Pipeline
 
 ```
                     SUPPORT TICKET (raw text)
@@ -53,6 +68,64 @@ An agentic workflow that orchestrates multiple Claude AI agents to automatically
                             v
                 STRUCTURED SUPPORT RESPONSE
 ```
+
+The order above never changes. Step 2 always runs after step 1, regardless
+of what step 1 found. The code, not the model, is making the routing
+decisions.
+
+## Architecture: v2, Agentic Loop
+
+```
+                    SUPPORT TICKET (raw text)
+                            |
+                            v
+              +-------------------------------+
+              |   CLAUDE (reasons about the   |<------------------+
+              |   ticket and decides on an    |                    |
+              |   action)                     |                    |
+              +---------------+---------------+                    |
+                              |                                      |
+                  picks ONE tool to call:                            |
+                  - search_knowledge_base(category)                  |
+                  - list_kb_categories()                             |
+                  - escalate_ticket(reason, team, severity)          |
+                  - deliver_customer_response(category,              |
+                        severity, response_text)                     |
+                              |                                       |
+                              v                                       |
+              +-------------------------------+                      |
+              |   TOOL EXECUTES, RESULT IS    |                       |
+              |   RETURNED TO CLAUDE          |----------------------+
+              +---------------+---------------+
+                              |
+            if escalate_ticket or deliver_customer_response
+                  was called, the loop ends here
+                              |
+                              v
+                  RESOLUTION or ESCALATION
+```
+
+Unlike v1, the path through this diagram is not fixed. For a ticket where
+the first knowledge base search does not match well, Claude can loop back,
+search a different category, and only then decide to resolve or escalate.
+The number of steps and the order of tool calls can differ from one ticket
+to the next, because Claude is making that decision in real time based on
+what it observes.
+
+## Definitions Used in This Project
+
+**Agentic AI**: A system in which the model itself, not the surrounding
+code, decides what action to take next based on the outcome of its previous
+action, in a Reason-Act-Observe loop (sometimes called ReAct). The defining
+test: can you predict the exact sequence of operations before running it?
+If yes, it is a pipeline. If the model can deviate based on what it
+discovers mid-task, it is agentic.
+
+**LLM pipeline / compound AI workflow**: Multiple LLM calls chained in a
+fixed, predetermined order. Often called "agentic" informally, but does not
+meet the technical definition above because the model has no control over
+sequencing.
+
 
 ## Supported Issue Categories
 
