@@ -10,7 +10,7 @@ Two architectures, one task. A sequential LLM pipeline (v1) vs. a true agentic l
 
 **v1 – Sequential Pipeline**: Three Claude agents run in a fixed order. Classifier → Researcher → Responder. Each agent has a defined role and hands off a structured output. Predictable, fast, and easy to debug.
 
-**v2 – True Agentic Loop**: Claude receives the ticket and decides which tools to call, in what order, and when it has enough information to respond. No hardcoded sequence. The model reasons, acts, observes the result, and iterates. This is the Reason-Act-Observe loop in practice and the first genuinely agentic application in this portfolio.
+**v2 – True Agentic Loop**: Claude receives the ticket and decides which tools to call, in what order, and when it has enough information to respond. No hardcoded sequence. The model reasons, acts, observes the result, and iterates. This is the Reason-Act-Observe loop in practice and t  he first genuinely agentic application in this portfolio.
 
 ## What This Project Demonstrates
 
