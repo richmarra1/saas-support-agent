@@ -1,5 +1,9 @@
 # SaaS Support Agent: Pipeline vs. Agentic Loop
 
+## Live Demo
+
+[richmarra-saas-support-agent.streamlit.app](https://richmarra-saas-support-agent.streamlit.app)
+
 Two architectures, one task. A sequential LLM pipeline (v1) vs. a true agentic loop (v2) where Claude autonomously selects its own tools via a Reason-Act-Observe cycle. Built to demonstrate the architectural difference between chaining prompts and genuine agentic behavior.
 
 ## Live Architecture Comparison
