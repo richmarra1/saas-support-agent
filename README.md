@@ -31,3 +31,29 @@ Two architectures, one task. A sequential LLM pipeline (v1) vs. a true agentic l
 5. Run `streamlit run app.py`
 
 ## Architecture – v1 Pipeline
+
+TICKET → CLASSIFIER → RESEARCHER (KB tool) → RESPONDER → STRUCTURED RESPONSE
+
+## Architecture – v2 Agentic Loop
+
+TICKET → CLAUDE (reasons) → selects tool → observes result → reasons again → responds or selects next tool → FINAL RESPONSE
+
+## Supported Issue Categories
+
+| Category | Examples |
+|---|---|
+| Authentication & Login | Password resets, SSO/SAML failures, 2FA issues |
+| Integration & API | 401 errors, webhook failures, sync problems |
+| Performance & Reliability | Slow pages, timeouts, export failures |
+| Billing & Account | Unexpected charges, invoice discrepancies |
+| Permissions & Access Control | Role misconfigurations, feature access denied |
+
+## Part of RichBuildsAI.dev
+
+Building a public portfolio of working AI applications.
+
+[github.com/richmarra1](https://github.com/richmarra1) | [RichBuildsAI.dev](https://github.com/richmarra1)
+
+## License
+
+MIT
