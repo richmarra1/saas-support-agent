@@ -10,7 +10,7 @@ import streamlit as st
 import time
 import json
 from agents import classify_ticket, research_issue, format_response
-from agentic_engine import run_agentic_loop
+from agentic_engine import run_agent
 
 st.set_page_config(
     page_title="SaaS Support Agent",
@@ -144,17 +144,18 @@ if run_button and ticket_input.strip():
             st.markdown('<div class="agent-card agentic"><div class="agent-title">v2 Agentic Loop: Claude Reasoning Autonomously</div></div>', unsafe_allow_html=True)
             with st.spinner("Claude is reasoning, selecting tools, and iterating..."):
                 t_start = time.time()
-                agentic_result = run_agentic_loop(ticket_input)
+                agentic_result = run_agent(ticket_input)
                 t_elapsed = time.time() - t_start
-            st.markdown(f"**Total Time:** {t_elapsed:.1f}s")
-            st.markdown(f"**Tool Calls Made:** {agentic_result.get('tool_calls_made', 'N/A')}")
-            st.markdown(f"**Iterations:** {agentic_result.get('iterations', 'N/A')}")
+            st.markdown(f"**Outcome:** {agentic_result.get('outcome', 'N/A')}")
             st.divider()
             st.markdown("### Final Response")
-            st.markdown(agentic_result.get("response", "No response generated."))
+            data = agentic_result.get("data", {})
+            st.markdown(data.get("response_text", "No response generated."))
             with st.expander("View Agentic Reasoning Trace"):
-                for i, step in enumerate(agentic_result.get("reasoning_trace", []), 1):
-                    st.markdown(f"**Step {i}:** {step}")
+                for step in agentic_result.get("trace", []):
+                    st.markdown(f"**Step {step.get('step')}:** {step.get('reasoning', '')}")
+                    for tc in step.get("tool_calls", []):
+                        st.markdown(f"- Tool: `{tc['name']}`")
             with st.expander("View Raw JSON Output"):
                 st.json(agentic_result)
 
