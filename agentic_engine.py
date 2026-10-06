@@ -22,12 +22,22 @@ two terminal tools (deliver_customer_response or escalate_ticket), or when
 a safety cap on steps is reached.
 """
 
-import json
-import anthropic
-from knowledge_base import search_knowledge_base, get_all_categories
+   import json
+   import os
+   import anthropic
+   import streamlit as st
+   from knowledge_base import search_knowledge_base, get_all_categories
 
 
-client = anthropic.Anthropic()
+   def _get_api_key():
+       try:
+           key = st.secrets["ANTHROPIC_API_KEY"]
+       except Exception:
+           key = os.getenv("ANTHROPIC_API_KEY", "")
+       return key.strip().strip('"').strip("'")
+
+
+   client = anthropic.Anthropic(api_key=_get_api_key())
 
 MODEL = "claude-sonnet-4-6"
 
