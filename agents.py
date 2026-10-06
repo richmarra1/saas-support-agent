@@ -9,14 +9,24 @@ This module implements a three-agent pipeline that:
 The agents use Claude (Sonnet) via the Anthropic API with tool use,
 demonstrating agentic orchestration of AI to save human time.
 """
-   import json
-   import os
-   import anthropic
-   import streamlit as st
-   ...
-   client = anthropic.Anthropic(api_key=_get_api_key())
+import json
+import os
+import anthropic
+import streamlit as st
+from knowledge_base import search_knowledge_base
 
-   MODEL = "claude-sonnet-4-6"
+
+def _get_api_key():
+    try:
+        key = st.secrets["ANTHROPIC_API_KEY"]
+    except Exception:
+        key = os.getenv("ANTHROPIC_API_KEY", "")
+    return key.strip().strip('"').strip("'")
+
+
+client = anthropic.Anthropic(api_key=_get_api_key())
+
+MODEL = "claude-sonnet-4-6"
 
 
 
